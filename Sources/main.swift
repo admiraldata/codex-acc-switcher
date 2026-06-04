@@ -27,10 +27,14 @@ struct CommandResult {
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let refreshInterval: TimeInterval = 5
+    // `list --active` is cached; only `--api` re-queries OpenAI (and so reflects 5h/weekly
+    // resets and live consumption). Hit it on a slow cadence to avoid hammering the API.
+    private let liveRefreshInterval: TimeInterval = 900
     private let labelsDefaultsKey = "accountDisplayLabels"
     private let remindersEnabledDefaultsKey = "usageReminderEnabled"
     private let reminderThresholdDefaultsKey = "usageReminderThreshold"
     private var refreshTimer: Timer?
+    private var liveRefreshTimer: Timer?
     private var statusAnimationTimer: Timer?
     private var statusAnimationFrame = 0
     private var accounts: [CodexAccount] = []
@@ -75,12 +79,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         NSApp.setActivationPolicy(.accessory)
         configureNotifications()
         configureStatusButton()
-        refreshAccounts()
+        refreshAccounts(live: true)
         let timer = Timer(timeInterval: refreshInterval, repeats: true) { [weak self] _ in
             self?.refreshAccounts()
         }
         RunLoop.current.add(timer, forMode: .common)
         refreshTimer = timer
+
+        let liveTimer = Timer(timeInterval: liveRefreshInterval, repeats: true) { [weak self] _ in
+            self?.refreshAccounts(live: true)
+        }
+        RunLoop.current.add(liveTimer, forMode: .common)
+        liveRefreshTimer = liveTimer
 
         let animationTimer = Timer(timeInterval: 0.65, repeats: true) { [weak self] _ in
             self?.advanceStatusAnimation()
@@ -124,10 +134,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         return image
     }
 
-    private func refreshAccounts() {
+    private func refreshAccounts(live: Bool = false) {
         guard !isSwitching else { return }
         DispatchQueue.global(qos: .utility).async {
-            var result = self.runCodexAuth(["list", "--active"])
+            // `--api` forces a live OpenAI fetch (reflects 5h/weekly resets and live
+            // consumption); `--skip-api` is cached and fast. (Note: this codex-auth
+            // version has no `--active` flag; the active row is marked with `*` in both.)
+            var result = self.runCodexAuth(live ? ["list", "--api"] : ["list", "--skip-api"])
             if result.status != 0 {
                 result = self.runCodexAuth(["list", "--skip-api"])
             }
@@ -192,7 +205,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 let item = NSMenuItem(title: "", action: #selector(switchAccount(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = account.selector
-                item.attributedTitle = accountAttributedTitle(label: displayLabel(for: account), email: account.email)
+                item.attributedTitle = accountAttributedTitle(
+                    label: displayLabel(for: account),
+                    email: account.email,
+                    weekly: remainingPercentText(fromUsed: account.weeklyUsedPercent)
+                )
                 item.state = account.isActive ? .on : .off
                 item.toolTip = "Plan \(account.plan), 5h \(account.fiveHourUsage), weekly \(account.weeklyUsage)"
                 item.isEnabled = !isSwitching
@@ -332,10 +349,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         )
     }
 
-    private func accountAttributedTitle(label: String, email: String) -> NSAttributedString {
+    private func accountAttributedTitle(label: String, email: String, weekly: String) -> NSAttributedString {
         attributedColumns(
-            "\(limitedLabel(label))\t\(email)",
-            tabs: [86],
+            "\(limitedLabel(label))\t\(email)\tW \(weekly)",
+            tabs: [86, 260],
             font: NSFont.menuFont(ofSize: 0),
             color: .labelColor
         )
@@ -417,7 +434,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     @objc private func refreshNow() {
-        refreshAccounts()
+        refreshAccounts(live: true)
     }
 
     @objc private func setFiveHourMode() {
@@ -553,7 +570,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         alert.addButton(withTitle: "Cancel")
 
         if alert.runModal() == .alertFirstButtonReturn {
-            runAccountMaintenance(title: "Removing account", args: ["remove", selector])
+            // `remove <query>` matches by email/alias, not row number.
+            runAccountMaintenance(title: "Removing account", args: ["remove", account.email])
         }
     }
 
@@ -588,7 +606,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 return
             }
 
-            let switchResult = self.runCodexAuth(["switch", selector])
+            // codex-auth `switch <query>` matches by email/alias, not row number, so
+            // pass the account email (falling back to the selector if unknown).
+            let switchResult = self.runCodexAuth(["switch", target?.email ?? selector])
             if switchResult.status != 0 {
                 DispatchQueue.main.async {
                     self.isSwitching = false
@@ -832,6 +852,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     private func restartCodexApp() -> CommandResult {
+        // Only restart the Codex App if it was actually running. CLI-only users do
+        // not need it relaunched — `codex-auth switch` already updated auth.json, and
+        // the CLI reads that fresh on its next invocation.
+        guard !codexAppPIDs().isEmpty else {
+            return CommandResult(status: 0, output: "Codex App was not running; left it closed.")
+        }
+
         var transcript: [String] = []
         transcript.append("Force-quitting Codex App process tree...")
 

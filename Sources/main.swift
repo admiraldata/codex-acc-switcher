@@ -208,6 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 item.attributedTitle = accountAttributedTitle(
                     label: displayLabel(for: account),
                     email: account.email,
+                    fiveHour: remainingPercentText(fromUsed: account.fiveHourUsedPercent),
                     weekly: remainingPercentText(fromUsed: account.weeklyUsedPercent)
                 )
                 item.state = account.isActive ? .on : .off
@@ -349,9 +350,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         )
     }
 
-    private func accountAttributedTitle(label: String, email: String, weekly: String) -> NSAttributedString {
+    private func accountAttributedTitle(label: String, email: String, fiveHour: String, weekly: String) -> NSAttributedString {
         attributedColumns(
-            "\(limitedLabel(label))\t\(email)\tW \(weekly)",
+            "\(limitedLabel(label))\t\(email)\t5H \(fiveHour)  W \(weekly)",
             tabs: [86, 260],
             font: NSFont.menuFont(ofSize: 0),
             color: .labelColor

@@ -26,6 +26,19 @@
 
 ---
 
+> [!IMPORTANT]
+> **This is a fork.** The original **Codex Account Switcher** was created by
+> [**@MohamedFuad16**](https://github.com/MohamedFuad16) — original repository:
+> [MohamedFuad16/Codex-Acc-Switcher](https://github.com/MohamedFuad16/Codex-Acc-Switcher).
+> All credit for the original design and implementation goes to the upstream author.
+>
+> This fork ([admiraldata/codex-acc-switcher](https://github.com/admiraldata/codex-acc-switcher))
+> adds compatibility fixes for `codex-auth` 0.2.x and usage-display improvements.
+> See [What this fork changes](#-what-this-fork-changes) below. Distributed under the
+> original project's MIT License.
+
+---
+
 ## 📖 Overview
 
 **Codex Account Switcher** is an ultra-lightweight, blazing-fast macOS menu bar utility built in pure Swift. It eliminates the friction of managing multiple OpenAI Codex / ChatGPT credentials on your local machine. 
@@ -122,8 +135,22 @@ To test changes rapidly without installing:
 
 ---
 
+## 🔀 What this fork changes
+
+This fork is maintained at [admiraldata/codex-acc-switcher](https://github.com/admiraldata/codex-acc-switcher).
+It tracks the original by [@MohamedFuad16](https://github.com/MohamedFuad16) and adds:
+
+*   **`codex-auth` 0.2.x compatibility** — switches and removes accounts by **email** (the `switch`/`remove <query>` form that 0.2.x accepts) instead of the row-number selector, which is not recognized in that version.
+*   **Conditional Codex App relaunch** — the Codex App is only force-restarted on switch if it was already running, so CLI-only users are not interrupted by an unwanted launch.
+*   **Live usage refresh** — a cached `list --skip-api` poll keeps the menu responsive, while a live `list --api` refresh on launch, every 15 minutes, and on manual **Refresh** keeps 5h/weekly usage and resets current.
+*   **Inline weekly remaining** — each account row shows its remaining weekly percentage directly in the menu.
+
+All upstream functionality and design are unchanged; these are additive fixes.
+
+---
+
 ## 📝 License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
-Developed with ❤️ by **[MohamedFuad16](https://github.com/MohamedFuad16)**. Contributions and issues are always welcome!
+Originally developed with ❤️ by **[MohamedFuad16](https://github.com/MohamedFuad16)** — full credit for the original work. This fork is maintained by **[admiraldata](https://github.com/admiraldata)**. Contributions and issues are always welcome!

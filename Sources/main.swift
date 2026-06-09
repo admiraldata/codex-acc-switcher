@@ -76,6 +76,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Single-instance guard: if another copy with our bundle id is already
+        // running (e.g. launchd started us at login and the user also opened the
+        // app from Finder), bail out so we never show two menu bar items.
+        let myID = Bundle.main.bundleIdentifier ?? "com.mohamedfuad.codexaccountswitcher"
+        let myPID = ProcessInfo.processInfo.processIdentifier
+        let alreadyRunning = NSWorkspace.shared.runningApplications.contains {
+            $0.bundleIdentifier == myID && $0.processIdentifier != myPID
+        }
+        if alreadyRunning {
+            NSApp.terminate(nil)
+            return
+        }
+
         NSApp.setActivationPolicy(.accessory)
         configureNotifications()
         configureStatusButton()
